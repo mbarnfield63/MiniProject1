@@ -1,0 +1,4 @@
+# Ignore all within pycache
+__pycache__/
+# Ignore all files starting with LL-Output
+LL-Output*
