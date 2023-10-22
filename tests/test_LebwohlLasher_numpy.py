@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from ..LebwohlLasher_numpy import *
+from code.LebwohlLasher_numpy import *
 
 def test_initdat():
     # testing values
