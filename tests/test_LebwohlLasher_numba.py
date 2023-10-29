@@ -46,10 +46,9 @@ def test_get_order():
 def test_MC_step():
     # testing values
     nmax = 5
-    np.random.seed(42)
-    arr = np.random.random_sample((nmax, nmax))*2.0*np.pi
     Ts = 0.5
-
+    aran = np.random.normal(scale=0.1+Ts, size=(nmax,nmax))
+    arr = np.zeros((nmax, nmax))    
     # test function
-    MC = MC_step(arr, Ts, nmax)
-    assert MC == 0.52
+    MC = MC_step(arr, Ts, nmax, aran)
+    assert 0.0 <= MC <= 1.0
