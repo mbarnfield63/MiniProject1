@@ -36,15 +36,17 @@ if __name__ == '__main__':
             mean_time = np.mean(time_array)
             max_time = np.max(time_array)
             min_time = np.min(time_array)
+            sum_time = np.sum(time_array)
 
             # Print the results
             print(f"Mean Time: {mean_time}")
             print(f"Max Time: {max_time}")
             print(f"Min Time: {min_time}")
+            print(f"Sum Time: {sum_time}")
 
             # Save the time values to a TSV file
-            np.savetxt(SAVEFILENAME, time_array, delimiter='\t', header='Time (s)', comments='', fmt='%.6f')
-            print(f"Time array saved to '{SAVEFILENAME}'")
+            np.savetxt(f'Timings/{SAVEFILENAME}', time_array, delimiter='\t', header='Time (s)', comments='', fmt='%.6f')
+            print(f"Time array saved to 'Timings/{SAVEFILENAME}'")
         else:
             print("No valid time values found in the file.")
     else:
