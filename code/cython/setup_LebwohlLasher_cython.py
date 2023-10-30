@@ -9,8 +9,8 @@ import numpy
 
 
 LebwohlLasher = Extension(
-    "LebwohlLasher",
-    sources=["./code/cython/LebwohlLasher_cython.pyx"],
+    "LebwohlLasher_cython",
+    sources=["LebwohlLasher_cython.pyx"],
     extra_compile_args=['-O3'],
     extra_link_args=['-O3']
 )

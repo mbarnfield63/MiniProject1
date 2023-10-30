@@ -21,6 +21,7 @@ domains alternate between old data and new data.
 
 SH 16-Oct-23
 """
+
 #cython: language_level=3
 import sys
 import time
@@ -92,42 +93,31 @@ def plotdat(arr,pflag,nmax):
     ax.set_aspect('equal')
     plt.show()
 #=======================================================================
-def savedat(arr,nsteps,Ts,runtime,ratio,energy,order,nmax):
-    """
-    Arguments:
-	  arr (float(nmax,nmax)) = array that contains lattice data;
-	  nsteps (int) = number of Monte Carlo steps (MCS) performed;
-	  Ts (float) = reduced temperature (range 0 to 2);
-	  ratio (float(nsteps)) = array of acceptance ratios per MCS;
-	  energy (float(nsteps)) = array of reduced energies per MCS;
-	  order (float(nsteps)) = array of order parameters per MCS;
-      nmax (int) = side length of square lattice to simulated.
-    Description:
-      Function to save the energy, order and acceptance ratio
-      per Monte Carlo step to text file.  Also saves run data in the
-      header.  Filenames are generated automatically based on
-      date and time at beginning of execution.
-	Returns:
-	  NULL
-    """
-    # Create filename based on current date and time.
+def savedat(double[:, ::1] arr, int nsteps, double Ts, double[:] ratio, double[:] energy, double[:] order, int nmax):
+    # Create filename based on the current date and time.
     current_datetime = datetime.datetime.now().strftime("%a-%d-%b-%Y-at-%I-%M-%S%p")
-    filename = "./Outputs/LL-Output-{:s}.txt".format(current_datetime)
-    FileOut = open(filename,"w")
-    # Write a header with run parameters
-    #print("#=====================================================",file=FileOut)
-    #print("# File created:        {:s}".format(current_datetime),file=FileOut)
-    #print("# Size of lattice:     {:d}x{:d}".format(nmax,nmax),file=FileOut)
-    #print("# Number of MC steps:  {:d}".format(nsteps),file=FileOut)
-    #print("# Reduced temperature: {:5.3f}".format(Ts),file=FileOut)
-    #print("# Run time (s):        {:8.6f}".format(runtime),file=FileOut)
-    #print("#=====================================================",file=FileOut)
-    #print("# MC step:  Ratio:     Energy:   Order:",file=FileOut)
-    #print("#=====================================================",file=FileOut)
-    # Write the columns of data
-    #for i in range(nsteps+1):
-    #    print("   {:05d}    {:6.4f} {:12.4f}  {:6.4f} ".format(i,ratio[i],energy[i],order[i]),file=FileOut)
-    FileOut.close()
+    filename = "./Outputs/LL-Output-{:s}.txt".format(current_datetime).encode('utf-8')
+    
+    # Declare variables
+    cdef double runtime = 0.0  # Assign a value to runtime
+    cdef int i
+
+    # Write the data to the file
+    with open(filename, "wb") as FileOut:
+        # Write the header with run parameters
+        FileOut.write("#=====================================================\n".encode('utf-8'))
+        FileOut.write("# File created:        {:s}\n".format(current_datetime).encode('utf-8'))
+        FileOut.write("# Size of lattice:     {:d}x{:d}\n".format(nmax, nmax).encode('utf-8'))
+        FileOut.write("# Number of MC steps:  {:d}\n".format(nsteps).encode('utf-8'))
+        FileOut.write("# Reduced temperature: {:5.3f}\n".format(Ts).encode('utf-8'))
+        FileOut.write("# Run time (s):        {:8.6f}\n".format(runtime).encode('utf-8'))
+        FileOut.write("#=====================================================\n".encode('utf-8'))
+        FileOut.write("# MC step:  Ratio:     Energy:   Order:\n".encode('utf-8'))
+        FileOut.write("#=====================================================\n".encode('utf-8'))
+        
+        # Write the columns of data
+        for i in range(nsteps + 1):
+            FileOut.write("   {:05d}    {:6.4f} {:12.4f}  {:6.4f} ".format(i, ratio[i], energy[i], order[i]).encode('utf-8'))
 #=======================================================================
 def one_energy(arr,ix,iy,nmax):
     """
@@ -293,7 +283,7 @@ def main(program, nsteps, nmax, temp, pflag):
     # Final outputs
     print("{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(program, nmax,nsteps,temp,order[nsteps-1],runtime))
     # Plot final frame of lattice and generate output file
-    savedat(lattice,nsteps,temp,runtime,ratio,energy,order,nmax)
+    #savedat(lattice,nsteps,temp,ratio,energy,order,nmax)
     plotdat(lattice,pflag,nmax)
 #=======================================================================
 # Main part of program, getting command line arguments and calling
