@@ -32,6 +32,7 @@ import matplotlib as mpl
 from numba import jit, prange
 
 #=======================================================================
+@jit(nopython=True, cache=True)
 def initdat(nmax):
     """
     Arguments:
