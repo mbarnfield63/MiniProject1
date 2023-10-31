@@ -15,7 +15,7 @@ LebwohlLasher = Extension(
     extra_link_args=['-O3']
 )
 
-setup(
+setup(name="LebwohlLasher",
     ext_modules = cythonize(LebwohlLasher),
     include_dirs=[numpy.get_include()],  # Include NumPy header files
     packages=find_packages(),
