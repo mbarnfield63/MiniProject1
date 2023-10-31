@@ -34,8 +34,8 @@ import matplotlib as mpl
 import numpy as np
 
 cimport numpy as np
-from libc.math cimport cos, sin, exp
-from libc.stdlib cimport rand, srand, RAND_MAX
+from cython.parallel import prange
+from libc.math cimport cos, exp, pi
 
 #=======================================================================
 cdef initdat(int nmax):
@@ -51,12 +51,11 @@ cdef initdat(int nmax):
     """
     cdef:
       int i, j
-      double[:, :] arr = np.empty((nmax, nmax), dtype=np.float64)
+      double[:, :] arr = np.empty((nmax, nmax))
 
     for i in range(nmax):
         for j in range(nmax):
-            arr[i, j] = <double>(2.0 * np.pi * np.random.rand())
-
+            arr[i, j] = np.random.random()*(2*pi)
     return arr
 #=======================================================================
 def plotdat(arr,pflag,nmax):
@@ -109,7 +108,7 @@ def plotdat(arr,pflag,nmax):
 def savedat(double[:, ::1] arr, int nsteps, double Ts, double[:] ratio, double[:] energy, double[:] order, int nmax):
     # Create filename based on the current date and time.
     current_datetime = datetime.datetime.now().strftime("%a-%d-%b-%Y-at-%I-%M-%S%p")
-    filename = "./Outputs/LL-Output-{:s}.txt".format(current_datetime).encode('utf-8')
+    filename = "/user/home/eh19374/Year4/MiniProject1/Outputs/LL-Output-{:s}.txt".format(current_datetime).encode('utf-8')
     
     # Declare variables
     cdef double runtime = 0.0  # Assign a value to runtime
@@ -130,7 +129,7 @@ def savedat(double[:, ::1] arr, int nsteps, double Ts, double[:] ratio, double[:
         
         # Write the columns of data
         for i in range(nsteps + 1):
-            FileOut.write("   {:05d}    {:6.4f} {:12.4f}  {:6.4f} ".format(i, ratio[i], energy[i], order[i]).encode('utf-8'))
+            FileOut.write("\n   {:05d}    {:6.4f} {:12.4f}  {:6.4f} ".format(i, ratio[i], energy[i], order[i]).encode('utf-8'))
 #=======================================================================
 cdef double one_energy(double[:, :] arr, int ix, int iy, int nmax):
     """
@@ -150,29 +149,24 @@ cdef double one_energy(double[:, :] arr, int ix, int iy, int nmax):
     cdef:
       double en = 0.0
       int ixp, ixm, iyp, iym
-      double neighbors[4]
-      double ang_diff
-      double cos_squared = 0.0
 
-    ixp = (ix + 1) % nmax
-    ixm = (ix - 1 + nmax) % nmax
-    iyp = (iy + 1) % nmax
-    iym = (iy - 1 + nmax) % nmax
-
-    # Extract the values of the neighbors
-    neighbors[0] = arr[ixp, iy]
-    neighbors[1] = arr[ixm, iy]
-    neighbors[2] = arr[ix, iyp]
-    neighbors[3] = arr[ix, iym]
-
-    # Compute the angular differences using a for loop    
-    for i in range(4):
-        ang_diff = arr[ix, iy] - neighbors[i]
-        cos_squared += (cos(ang_diff) ** 2)
-
-    # Calculate energy
-    en = 0.5 * (1.0 - 3.0 * cos_squared)
-
+    en = 0.0
+    ixp = (ix+1)%nmax # These are the coordinates
+    ixm = (ix-1)%nmax # of the neighbours
+    iyp = (iy+1)%nmax # with wraparound
+    iym = (iy-1)%nmax #
+#
+# Add together the 4 neighbour contributions
+# to the energy
+#
+    ang = arr[ix,iy]-arr[ixp,iy]
+    en += 0.5*(1.0 - 3.0*cos(ang)**2)
+    ang = arr[ix,iy]-arr[ixm,iy]
+    en += 0.5*(1.0 - 3.0*cos(ang)**2)
+    ang = arr[ix,iy]-arr[ix,iyp]
+    en += 0.5*(1.0 - 3.0*cos(ang)**2)
+    ang = arr[ix,iy]-arr[ix,iym]
+    en += 0.5*(1.0 - 3.0*cos(ang)**2)
     return en
 
 #=======================================================================
@@ -189,7 +183,6 @@ cdef double all_energy(double[:, :] arr, int nmax):
     """
     cdef: 
       double enall = 0.0
-      int i, j
 
     # Calculate the energy of the entire lattice    
     for i in range(nmax):
@@ -198,32 +191,33 @@ cdef double all_energy(double[:, :] arr, int nmax):
 
     return enall
 #=======================================================================
-def get_order(double[:,:] arr, int nmax):
+cdef get_order(double[:,:] arr, int nmax):
     cdef:
         double[:,:] Qab = np.zeros((3, 3))
         double[:,:] delta = np.eye(3)
         double[:,:, :] lab = np.empty((3, nmax, nmax))
         double[:] eigenvalues
         double[:,:] eigenvectors
-        double scalar = 2*nmax*nmax
-    
-    # Calculate Qab using Cythonized loops
+        int scalar = (2*nmax*nmax)
+
+    lab = np.vstack((np.cos(arr),np.sin(arr),np.zeros_like(arr))).reshape(3,nmax,nmax)
     for a in range(3):
         for b in range(3):
             for i in range(nmax):
                 for j in range(nmax):
-                    lab[a, i, j] = cos(arr[i, j]) if a == 0 else sin(arr[i, j]) if a == 1 else 0.0
-                    Qab[a, b] += 3 * lab[a, i, j] * lab[b, i, j] - delta[a, b]
-                    Qab[a, b] /= scalar
+                    Qab[a,b] += 3*lab[a,i,j]*lab[b,i,j] - delta[a,b]
 
+    for a in range(3):
+      for b in range(3):
+          Qab[a,b] /= scalar
+    
     # Use your own function to compute eigenvalues
     eigenvalues, eigenvectors = np.linalg.eig(Qab)
-
     # Return the maximum eigenvalue
     return np.max(eigenvalues)
 
 #=======================================================================
-def MC_step(double[:,:] arr, double Ts, int nmax):
+cdef MC_step(double[:,:] arr, double Ts, int nmax):
     """
     Arguments:
 	  arr (float(nmax,nmax)) = array that contains lattice data;
@@ -245,33 +239,29 @@ def MC_step(double[:,:] arr, double Ts, int nmax):
       long[:,:] xran = np.random.randint(0, high=nmax, size=(nmax, nmax))
       long[:,:] yran = np.random.randint(0, high=nmax, size=(nmax, nmax))
       double[:,:] aran = np.random.normal(scale=scale, size=(nmax, nmax))
-      int i, j, ix, iy
+      long ix, iy
       double ang, en0, en1, boltz
-      double random = RAND_MAX
-      double ratio
 
     for i in range(nmax):
         for j in range(nmax):
-            ix = xran[i, j]
-            iy = yran[i, j]
-            ang = aran[i, j]
-            en0 = one_energy(arr, ix, iy, nmax)
-            arr[ix, iy] += ang
-            en1 = one_energy(arr, ix, iy, nmax)
-
-            if en1 <= en0:
+            ix = xran[i,j]
+            iy = yran[i,j]
+            ang = aran[i,j]
+            en0 = one_energy(arr,ix,iy,nmax)
+            arr[ix,iy] += ang
+            en1 = one_energy(arr,ix,iy,nmax)
+            if en1<=en0:
                 accept += 1
             else:
-                # Now apply the Monte Carlo test - compare
-                # exp( -(E_new - E_old) / T* ) >= rand(0,1)
-                boltz = exp(-(en1 - en0) / Ts)
+            # Now apply the Monte Carlo test - compare
+            # exp( -(E_new - E_old) / T* ) >= rand(0,1)
+                boltz = exp( -(en1 - en0) / Ts )
 
-                if boltz >= rand() / random:
+                if boltz >= np.random.uniform(0.0,1.0):
                     accept += 1
                 else:
-                    arr[ix, iy] -= ang
-    ratio = accept / (nmax * nmax) 
-    return ratio
+                    arr[ix,iy] -= ang
+    return accept / (nmax * nmax)
 
 #=======================================================================
 def main(program, int nsteps, int nmax, double temp, int pflag):
@@ -290,16 +280,15 @@ def main(program, int nsteps, int nmax, double temp, int pflag):
     """
     # Create and initialise lattice
     lattice = initdat(nmax)
+
     # Plot initial frame of lattice
     plotdat(lattice,pflag,nmax)
+
     # Create arrays to store energy, acceptance ratio and order parameter
     cdef:
       double[:] energy = np.zeros(nsteps+1)
       double[:] ratio = np.zeros(nsteps+1)
       double[:] order = np.zeros(nsteps+1)
-    # energy 
-    # ratio 
-    # order 
 
     # Set initial values in arrays
     energy[0] = all_energy(lattice,nmax)
@@ -318,7 +307,7 @@ def main(program, int nsteps, int nmax, double temp, int pflag):
     # Final outputs
     print("{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(program, nmax, nsteps, temp, order[-1], runtime))
     # Plot final frame of lattice and generate output file
-    #savedat(lattice,nsteps,temp,ratio,energy,order,nmax)
+    savedat(lattice,nsteps,temp,ratio,energy,order,nmax)
     plotdat(lattice,pflag,nmax)
 #=======================================================================
 # Main part of program, getting command line arguments and calling
