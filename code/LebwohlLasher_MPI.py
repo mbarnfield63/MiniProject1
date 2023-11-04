@@ -26,8 +26,13 @@ import sys
 import time
 import datetime
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib as mpl
+
+from mpi4py import MPI
+
+#===== MPI =====#
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 #=======================================================================
 def initdat(nmax):
@@ -43,53 +48,7 @@ def initdat(nmax):
     """
     arr = np.random.random_sample((nmax,nmax))*2.0*np.pi
     return arr
-#=======================================================================
-def plotdat(arr,pflag,nmax):
-    """
-    Arguments:
-	  arr (float(nmax,nmax)) = array that contains lattice data;
-	  pflag (int) = parameter to control plotting;
-      nmax (int) = side length of square lattice.
-    Description:
-      Function to make a pretty plot of the data array.  Makes use of the
-      quiver plot style in matplotlib.  Use pflag to control style:
-        pflag = 0 for no plot (for scripted operation);
-        pflag = 1 for energy plot;
-        pflag = 2 for angles plot;
-        pflag = 3 for black plot.
-	  The angles plot uses a cyclic color map representing the range from
-	  0 to pi.  The energy plot is normalised to the energy range of the
-	  current frame.
-	Returns:
-      NULL
-    """
-    if pflag==0:
-        return
-    u = np.cos(arr)
-    v = np.sin(arr)
-    x = np.arange(nmax)
-    y = np.arange(nmax)
-    cols = np.zeros((nmax,nmax))
-    if pflag==1: # colour the arrows according to energy
-        mpl.rc('image', cmap='rainbow')
-        for i in range(nmax):
-            for j in range(nmax):
-                cols[i,j] = one_energy(arr,i,j,nmax)
-        norm = plt.Normalize(cols.min(), cols.max())
-    elif pflag==2: # colour the arrows according to angle
-        mpl.rc('image', cmap='hsv')
-        cols = arr%np.pi
-        norm = plt.Normalize(vmin=0, vmax=np.pi)
-    else:
-        mpl.rc('image', cmap='gist_gray')
-        cols = np.zeros_like(arr)
-        norm = plt.Normalize(vmin=0, vmax=1)
 
-    quiveropts = dict(headlength=0,pivot='middle',headwidth=1,scale=1.1*nmax)
-    fig, ax = plt.subplots()
-    q = ax.quiver(x, y, u, v, cols,norm=norm, **quiveropts)
-    ax.set_aspect('equal')
-    plt.show()
 #=======================================================================
 def savedat(arr,nsteps,Ts,runtime,ratio,energy,order,nmax):
     """
@@ -228,33 +187,45 @@ def MC_step(arr,Ts,nmax):
     # using lots of individual calls.  "scale" sets the width
     # of the distribution for the angle changes - increases
     # with temperature.
-    scale=0.1+Ts
-    accept = 0
-    xran = np.random.randint(0,high=nmax, size=(nmax,nmax))
-    yran = np.random.randint(0,high=nmax, size=(nmax,nmax))
-    aran = np.random.normal(scale=scale, size=(nmax,nmax))
-    for i in range(nmax):
-        for j in range(nmax):
-            ix = xran[i,j]
-            iy = yran[i,j]
-            ang = aran[i,j]
-            en0 = one_energy(arr,ix,iy,nmax)
-            arr[ix,iy] += ang
-            en1 = one_energy(arr,ix,iy,nmax)
-            if en1<=en0:
-                accept += 1
-            else:
-            # Now apply the Monte Carlo test - compare
-            # exp( -(E_new - E_old) / T* ) >= rand(0,1)
-                boltz = np.exp( -(en1 - en0) / Ts )
 
-                if boltz >= np.random.uniform(0.0,1.0):
-                    accept += 1
+    # comm = MPI.COMM_WORLD
+    # rank = comm.Get_rank()
+    # size = comm.Get_size()
+
+    # Determine the portion of the lattice to work on for each process
+    rows_per_process = nmax // size
+    start_row = rank * rows_per_process
+    end_row = start_row + rows_per_process
+    local_accept = 0
+    scale = 0.1 + Ts
+
+    xran = np.random.randint(0, high=nmax, size=(nmax, nmax))
+    yran = np.random.randint(0, high=nmax, size=(nmax, nmax))
+    aran = np.random.normal(scale=scale, size=(nmax, nmax))
+
+    for i in range(start_row, end_row):
+        for j in range(nmax):
+            ix = xran[i, j]
+            iy = yran[i, j]
+            ang = aran[i, j]
+            en0 = one_energy(arr, ix, iy, nmax)
+            arr[ix, iy] += ang
+            en1 = one_energy(arr, ix, iy, nmax)
+            if en1 <= en0:
+                local_accept += 1
+            else:
+                boltz = np.exp(-(en1 - en0) / Ts)
+                if boltz >= np.random.uniform(0.0, 1.0):
+                    local_accept += 1
                 else:
-                    arr[ix,iy] -= ang
-    return accept/(nmax*nmax)
+                    arr[ix, iy] -= ang
+
+    # Sum the local_accept values from all processes
+    total_accept = comm.allreduce(local_accept, op=MPI.SUM)
+    ratio = total_accept / (nmax*nmax)
+    return ratio
 #=======================================================================
-def main(program, nsteps, nmax, temp, pflag):
+def main(program, nsteps, nmax, temp):
     """
     Arguments:
 	  program (string) = the name of the program;
@@ -269,8 +240,7 @@ def main(program, nsteps, nmax, temp, pflag):
     """
     # Create and initialise lattice
     lattice = initdat(nmax)
-    # Plot initial frame of lattice
-    plotdat(lattice,pflag,nmax)
+
     # Create arrays to store energy, acceptance ratio and order parameter
     energy = np.zeros(nsteps+1,dtype=np.dtype)
     ratio = np.zeros(nsteps+1,dtype=np.dtype)
@@ -289,23 +259,23 @@ def main(program, nsteps, nmax, temp, pflag):
     final = time.time()
     runtime = final-initial
     
-    # Final outputs
-    print("{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(program, nmax,nsteps,temp,order[nsteps-1],runtime))
-    # Plot final frame of lattice and generate output file
-    savedat(lattice,nsteps,temp,runtime,ratio,energy,order,nmax)
-    plotdat(lattice,pflag,nmax)
+    # Final outputs on master
+    if rank == 0:
+        print("{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(program, nmax,nsteps,temp,order[nsteps-1],runtime))
+        # Plot final frame of lattice and generate output file
+        savedat(lattice,nsteps,temp,runtime,ratio,energy,order,nmax)
+
 #=======================================================================
 # Main part of program, getting command line arguments and calling
 # main simulation function.
 #
 if __name__ == '__main__':
-    if int(len(sys.argv)) == 5:
+    if int(len(sys.argv)) == 4:
         PROGNAME = sys.argv[0]
         ITERATIONS = int(sys.argv[1])
         SIZE = int(sys.argv[2])
         TEMPERATURE = float(sys.argv[3])
-        PLOTFLAG = int(sys.argv[4])
-        main(PROGNAME, ITERATIONS, SIZE, TEMPERATURE, PLOTFLAG)
+        main(PROGNAME, ITERATIONS, SIZE, TEMPERATURE)
     else:
         print("Usage: python {} <ITERATIONS> <SIZE> <TEMPERATURE> <PLOTFLAG>".format(sys.argv[0]))
 #=======================================================================
