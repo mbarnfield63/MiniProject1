@@ -52,6 +52,7 @@ def initdat(int nmax):
     arr = np.random.random_sample((nmax,nmax))*2.0*np.pi
     return arr
 #=======================================================================
+
 # Plotdat removed due to errors being too intrusive when using
 # module add languages/anaconda3/2020-3.8.5
 # which is required for mpi4py
@@ -149,7 +150,6 @@ cdef get_order(double[:,:] arr, int nmax):
         double[:,:] delta = np.eye(3)
         double[:,:,:] lab = np.empty((3, nmax, nmax))
         double[:] eigenvalues
-        double[:,:] eigenvectors
         int scalar = (2*nmax*nmax)
 
     lab = np.vstack((np.cos(arr),np.sin(arr),np.zeros_like(arr))).reshape(3,nmax,nmax)
@@ -160,12 +160,9 @@ cdef get_order(double[:,:] arr, int nmax):
                     Qab[a,b] += 3*lab[a,i,j]*lab[b,i,j] - delta[a,b]
             Qab[a,b] /= scalar
 
-    #for a in range(3):
-    #  for b in range(3):
-    #      Qab[a,b] /= scalar
-    
+  
     # Use your own function to compute eigenvalues
-    eigenvalues, eigenvectors = np.linalg.eig(Qab)
+    eigenvalues = np.linalg.eigvals(Qab)
     # Return the maximum eigenvalue
     return np.max(eigenvalues)
 
@@ -257,7 +254,6 @@ def main(program, int nsteps, int nmax, double temp):
     MAXWORKER = nmax # maximum number of worker tasks
     MINWORKER = 1 # minimum number of worker tasks
     MASTER = 0 # taskid of first process
-    BEGIN = 1 # message tag
 
     #===== MASTER =====#
     if taskid == MASTER:
@@ -292,13 +288,9 @@ def main(program, int nsteps, int nmax, double temp):
     
     # Final outputs
     if taskid == MASTER:
-      print(
-          "{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(
-              program, nmax, nsteps, temp, order[-1], runtime
-          )
-      )
-      # Plot final frame of lattice and generate output file
-      savedat(lattice, nsteps, temp, ratio, energy, order, nmax)
+        print("{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(program, nmax,nsteps,temp,order[nsteps-1],runtime))
+        # Plot final frame of lattice and generate output file
+        savedat(lattice,nsteps,temp,runtime,ratio,energy,order,nmax)
 
 #=======================================================================
 # Main part of program, getting command line arguments and calling
