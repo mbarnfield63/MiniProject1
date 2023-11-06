@@ -34,6 +34,11 @@ from mpi4py import MPI
 cimport numpy as np
 from libc.math cimport cos, exp, pi
 
+#===== MPI =====#
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
 #=======================================================================
 def initdat(int nmax):
     """
@@ -193,10 +198,6 @@ cdef MC_step(double[:,:] arr, double Ts, int nmax):
       long ix, iy
       double ang, en0, en1, boltz, ratio
 
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
-
     # Determine the portion of the lattice to work on for each process
     rows_per_process = nmax // size
     start_row = rank * rows_per_process
@@ -245,24 +246,6 @@ def main(program, int nsteps, int nmax, double temp):
     Returns:
       NULL
     """
-    #===== MPI =====#
-    comm = MPI.COMM_WORLD
-    taskid = comm.Get_rank()
-    numtasks = comm.Get_size()
-    numworkers = numtasks-1
-
-    MAXWORKER = nmax # maximum number of worker tasks
-    MINWORKER = 1 # minimum number of worker tasks
-    MASTER = 0 # taskid of first process
-
-    #===== MASTER =====#
-    if taskid == MASTER:
-      # Check if numworkers is within range - quit if not
-      if (numworkers > MAXWORKER) or (numworkers < MINWORKER):
-          print("ERROR: the number of tasks must be between %d and %d." % (MINWORKER+1,MAXWORKER+1))
-          print("Quitting...")
-          comm.Abort()
-
     # Create and initialise lattice
     lattice = initdat(nmax)
 
@@ -287,11 +270,10 @@ def main(program, int nsteps, int nmax, double temp):
     runtime = final-initial
     
     # Final outputs
-    if taskid == MASTER:
-        print("{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(program, nmax,nsteps,temp,order[nsteps-1],runtime))
+    if rank == 0:
+        print("{}: Size: {:d}, Steps: {:d}, T*: {:5.3f}: Order: {:5.3f}, Time: {:8.6f} s".format(program,nmax,nsteps,temp,order[nsteps-1],runtime))
         # Plot final frame of lattice and generate output file
-        savedat(lattice,nsteps,temp,runtime,ratio,energy,order,nmax)
-
+        savedat(lattice,nsteps,temp,ratio,energy,order,nmax)
 #=======================================================================
 # Main part of program, getting command line arguments and calling
 if __name__ == '__main__':

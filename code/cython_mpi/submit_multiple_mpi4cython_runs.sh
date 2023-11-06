@@ -4,7 +4,7 @@
 #SBATCH --partition=veryshort
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=16
 #SBATCH --time=6:0:0
 #SBATCH --mem-per-cpu=100M
 #SBATCH --account=PHYS030544
@@ -32,15 +32,33 @@ start_time=$(date +%s)
 python setup_LebwohlLasher_mpi4cython.py build_ext --inplace
 
 # Number of workers must be <= Lattice size
-workers=8
+workers=16
 echo "Workers = ${workers}"
 
-# Number of runs
-x=50
+x=10
 
-# File run loop
 for ((i=1; i<=$x; i++)); do
-    mpiexec -n $workers python run_LebwohlLasher_mpi4cython.py 100 500 0.5
+    mpiexec -n $workers python run_LebwohlLasher_mpi4cython.py 50 10 0.5
+done
+
+for ((i=1; i<=$x; i++)); do
+    mpiexec -n $workers python run_LebwohlLasher_mpi4cython.py 50 50 0.5
+done
+
+for ((i=1; i<=$x; i++)); do
+    mpiexec -n $workers python run_LebwohlLasher_mpi4cython.py 50 100 0.5
+done
+
+for ((i=1; i<=$x; i++)); do
+    mpiexec -n $workers python run_LebwohlLasher_mpi4cython.py 50 250 0.5
+done
+
+for ((i=1; i<=$x; i++)); do
+    mpiexec -n $workers python run_LebwohlLasher_mpi4cython.py 50 500 0.5
+done
+
+for ((i=1; i<=$x; i++)); do
+    mpiexec -n $workers python run_LebwohlLasher_mpi4cython.py 50 1000 0.5
 done
 
 # End recording the end time
