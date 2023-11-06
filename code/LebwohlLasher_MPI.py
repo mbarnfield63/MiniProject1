@@ -28,7 +28,6 @@ import datetime
 import numpy as np
 
 from mpi4py import MPI
-
 #===== MPI =====#
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -48,6 +47,12 @@ def initdat(nmax):
     """
     arr = np.random.random_sample((nmax,nmax))*2.0*np.pi
     return arr
+
+#=======================================================================
+
+# Plotdat removed due to errors being too intrusive when using
+# module add languages/anaconda3/2020-3.8.5
+# which is required for mpi4py
 
 #=======================================================================
 def savedat(arr,nsteps,Ts,runtime,ratio,energy,order,nmax):
@@ -188,10 +193,6 @@ def MC_step(arr,Ts,nmax):
     # of the distribution for the angle changes - increases
     # with temperature.
 
-    # comm = MPI.COMM_WORLD
-    # rank = comm.Get_rank()
-    # size = comm.Get_size()
-
     # Determine the portion of the lattice to work on for each process
     rows_per_process = nmax // size
     start_row = rank * rows_per_process
@@ -221,9 +222,10 @@ def MC_step(arr,Ts,nmax):
                     arr[ix, iy] -= ang
 
     # Sum the local_accept values from all processes
-    total_accept = comm.allreduce(local_accept, op=MPI.SUM)
-    ratio = total_accept / (nmax*nmax)
-    return ratio
+    total_accept = comm.reduce(local_accept, op=MPI.SUM, root=0)
+    if rank == 0:
+        ratio = total_accept / (nmax*nmax)
+        return ratio
 #=======================================================================
 def main(program, nsteps, nmax, temp):
     """
