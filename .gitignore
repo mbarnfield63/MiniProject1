@@ -1,8 +1,9 @@
-# Ignore all within pycache, Numba
 __pycache__/
 cProfile_Outputs/Numba/
 Timings/
 build/
-# Ignore all files starting with LL-Output
 LL-Output*
 slurm*
+*.c
+*.so
+
